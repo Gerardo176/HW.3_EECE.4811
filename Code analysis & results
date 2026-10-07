@@ -1,0 +1,80 @@
+three workloads are used and the number of threads vary
+
+1 thread
+2 threads
+4 threads
+8 threads
+
+For every test, both implementations receive the same initial list size, operation count, keys, and thread count.
+
+We measure exection time. 
+
+**Workload 1**
+Keep constant:
+- 100-node list
+- 100,000 lookups per thread
+- Same lookup key range
+Vary:
+- 1, 2, 4, and 8 threads
+This workload demonstrates the locking overhead of hand-over-hand locking.
+The single-lock version acquires only 1 lock + 1 unlock per lookup
+
+Results:
+Threads	      Single      Lock Hand-over-Hand
+1	      0.009s	  0.037s
+2	      0.039s	  0.438s
+4	      0.068s	  0.871s
+8	      0.126s	  0.639s
+
+Single lock worked way better here
+
+**Workload 2**
+Keep constant:
+- 5,000-node list
+- 2,000 lookups per thread
+- Every lookup searches for a nonexistent key
+Vary:
+- 1, 2, 4, and 8 threads
+A failed lookup must traverse the entire list, increasing the amount of time that locks are held.
+This helps test whether allowing multiple threads to traverse different parts of the list benefits hand-over-hand locking.
+
+Results:
+Threads	      Single      Lock Hand-over-Hand
+1	      0.012s	  0.067s
+2	      0.037s	  0.143s
+4	      0.077s	  0.237s
+8	      0.115s	  0.471s
+
+Hand-over-hand locking still performed worse.
+
+**Workload 3**
+Keep constant:
+- initial list size = 1,000
+- 10,000 operations per thread
+- 90% lookup / 10% insert
+Vary:
+- 1, 2, 4, and 8 threads
+This workload the threads are both reading and modifying the data structure.
+
+Results:
+Threads	      Single      Lock Hand-over-Hand
+1	      0.012s	  0.057s
+2	      0.092s	  0.159s
+4	      0.348s	  0.492s
+8	      1.138s	  2.267s
+
+Both implementations became slower as contention increased, but the single-lock implementation remained faster.
+
+Final results:
+Single lock generally performed better in the benchmarks but both have their advantages/disadvantages:
+
+Single lock
+- Low synchronization overhead
+- Simple
+- Poor concurrency
+- Whole list becomes a bottleneck
+Hand-over-hand
+- More potential concurrency
+- Threads can occupy different parts of the list
+- Much higher synchronization overhead
+- May actually be slower, especially when operations on each node are very cheap
