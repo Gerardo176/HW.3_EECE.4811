@@ -1,0 +1,153 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <pthread.h>
+
+typedef struct node {
+    int key;
+    struct node *next;
+    pthread_mutex_t lock;
+} node_t;
+
+typedef struct {
+    node_t head;   // sentinel head node
+} list_t;
+
+
+/* Initialize the list */
+void List_Init(list_t *L) {
+    L->head.next = NULL;
+    pthread_mutex_init(&L->head.lock, NULL);
+}
+
+
+/* Insert a new node at the front of the list */
+int List_Insert(list_t *L, int key) {
+
+    node_t *new_node = malloc(sizeof(node_t));
+
+    if (new_node == NULL) {
+        perror("malloc");
+        return -1;
+    }
+
+    new_node->key = key;
+    pthread_mutex_init(&new_node->lock, NULL);
+
+    /*
+     * Lock the sentinel head because we are
+     * modifying the beginning of the list.
+     */
+    pthread_mutex_lock(&L->head.lock);
+
+    new_node->next = L->head.next;
+    L->head.next = new_node;
+
+    pthread_mutex_unlock(&L->head.lock);
+
+    return 0;
+}
+
+
+/* Search for a key using hand-over-hand locking */
+int List_Lookup(list_t *L, int key) {
+
+    node_t *prev = &L->head;
+
+    /*
+     * Start by locking the sentinel node.
+     */
+    pthread_mutex_lock(&prev->lock);
+
+    node_t *curr = prev->next;
+
+    while (curr != NULL) {
+
+        /*
+         * Lock the next node BEFORE releasing
+         * the previous node.
+         */
+        pthread_mutex_lock(&curr->lock);
+
+        pthread_mutex_unlock(&prev->lock);
+
+        /*
+         * Check the current node.
+         */
+        if (curr->key == key) {
+            pthread_mutex_unlock(&curr->lock);
+            return 0;
+        }
+
+        /*
+         * Move forward.
+         *
+         * curr is currently locked, so it
+         * becomes the "previous" node for
+         * the next iteration.
+         */
+        prev = curr;
+        curr = curr->next;
+    }
+
+    /*
+     * If curr == NULL, prev is still locked.
+     */
+    pthread_mutex_unlock(&prev->lock);
+
+    return -1;
+}
+
+
+/* Free all nodes and destroy their locks */
+void List_Destroy(list_t *L) {
+
+    pthread_mutex_lock(&L->head.lock);
+
+    node_t *curr = L->head.next;
+
+    while (curr != NULL) {
+
+        node_t *next = curr->next;
+
+        pthread_mutex_destroy(&curr->lock);
+        free(curr);
+
+        curr = next;
+    }
+
+    L->head.next = NULL;
+
+    pthread_mutex_unlock(&L->head.lock);
+
+    pthread_mutex_destroy(&L->head.lock);
+}
+
+
+/* Simple test */
+int main() {
+
+    list_t list;
+
+    List_Init(&list);
+
+    List_Insert(&list, 10);
+    List_Insert(&list, 20);
+    List_Insert(&list, 30);
+    List_Insert(&list, 40);
+
+    if (List_Lookup(&list, 20) == 0) {
+        printf("20 found\n");
+    } else {
+        printf("20 not found\n");
+    }
+
+    if (List_Lookup(&list, 100) == 0) {
+        printf("100 found\n");
+    } else {
+        printf("100 not found\n");
+    }
+
+    List_Destroy(&list);
+
+    return 0;
+}
