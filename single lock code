@@ -1,0 +1,20 @@
+int List_Lookup(list_t *L, int key) {
+    int rv = -1;
+
+    pthread_mutex_lock(&L->lock);
+
+    node_t *curr = L->head;
+
+    while (curr != NULL) {
+        if (curr->key == key) {
+            rv = 0;
+            break;
+        }
+
+        curr = curr->next;
+    }
+
+    pthread_mutex_unlock(&L->lock);
+
+    return rv;
+}
